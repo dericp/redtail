@@ -21,7 +21,6 @@ RUN apt-get install -y curl grep sed dpkg && \
     apt-get clean
 
 RUN conda create -n redtail-pytorch python=3.6 anaconda
-RUN /bin/bash -c "source activate redtail-pytorch"
-RUN conda install pytorch torchvision cuda90 -c pytorch
+RUN /bin/bash -c "source activate redtail-pytorch && conda install pytorch torchvision cuda90 -c pytorch"
 
 CMD [ "/bin/bash" ]
