@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.autograd import Function
 from torchvision import datasets
+import torchvision.transforms as transforms
 
 import trailnet
 
@@ -77,7 +78,8 @@ class CrossEntropySoftmaxWithEntropyLossLayer(Function):
 
 
 def main():
-    office_path_dataset = datasets.ImageFolder(root=sys.argv[1])
+    transform = transforms.Compose([transforms.ToTensor()])
+    office_path_dataset = datasets.ImageFolder(root=sys.argv[1], transform=transform)
     train_data = torch.utils.data.DataLoader(office_path_dataset, batch_size=64, shuffle=True, num_workers=4)
 
     net = trailnet.get_trailnet()
@@ -87,6 +89,11 @@ def main():
 
     for epoch in range(NUM_EPOCHS):
         print(epoch)
+        
+        running_loss = 0.0
+        for i, data in enumerate(train_data, 0):
+            inputs, labels = data 
+            print(i)
 
 
 if __name__ == '__main__':
