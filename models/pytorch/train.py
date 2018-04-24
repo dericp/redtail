@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.autograd import Variable
 from torch.autograd import Function
+from torch.utils.data.sampler import SubsetRandomSampler
 from torchvision import datasets
 import torchvision.transforms as transforms
 
@@ -13,6 +14,7 @@ import trailnet
 
 
 NUM_EPOCHS = 20
+CLASSES = ['lv', 'cv', 'rv']
 
 
 # Loss layer for cross entropy with softmax and entropy optimization.
@@ -79,22 +81,36 @@ class CrossEntropySoftmaxWithEntropyLossLayer(Function):
 
 
 def main():
-    transform = transforms.Compose([transforms.ToTensor()])
-    office_path_dataset = datasets.ImageFolder(root=sys.argv[1], transform=transform)
-    train_data = torch.utils.data.DataLoader(office_path_dataset, shuffle=True)
+    torch.cuda.device(1)
 
-    net = trailnet.get_trailnet()
+    transform = transforms.Compose([transforms.Resize((320, 180)), transforms.ToTensor()])
+    office_path_dataset = datasets.ImageFolder(root=sys.argv[1], transform=transform)
+    num_train = len(office_path_dataset)
+    indices = list(range(num_train))
+    split = num_train // 10
+    validation_idx = np.random.choice(indices, size=split, replace=False)
+    train_idx = list(set(indices) - set(validation_idx))
+    print(len(train_idx), 'train')
+    print(len(validation_idx), 'validation')
+
+    train_sampler = SubsetRandomSampler(train_idx)
+    validation_sampler = SubsetRandomSampler(validation_idx)
+
+    train_data = torch.utils.data.DataLoader(office_path_dataset, batch_size=64, num_workers=4, sampler=train_sampler)
+    validation_data = torch.utils.data.DataLoader(office_path_dataset, batch_size=64, num_workers=4, sampler=validation_sampler)
+
+    net = trailnet.get_trailnet().cuda()
 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.95, nesterov=True)
 
     for epoch in range(NUM_EPOCHS):
-        print('epoch ' + epoch)
+        print('epoch', epoch)
         
         running_loss = 0.0
         for i, data in enumerate(train_data, 0):
             inputs, labels = data 
-            inputs, labels = Variable(inputs), Variable(labels)
+            inputs, labels = Variable(inputs.cuda()), Variable(labels.cuda())
 
             optimizer.zero_grad()
             
@@ -104,10 +120,22 @@ def main():
             optimizer.step()
 
             running_loss += loss.data[0]
-            if i % 2000 == 1999:    # print every 2000 mini-batches
+            if i % 20 == 19:    # print every 2000 mini-batches
                 print('[%d, %5d] loss: %.3f' %
                       (epoch + 1, i + 1, running_loss / 2000))
                 running_loss = 0.0
+
+        # validation after every epoch
+        correct = 0
+        total = 0
+        for data in validation_data:
+            inputs, labels = data
+            #labels = [CLASSES[l] for l in labels]
+            outputs = net(Variable(inputs.cuda()))
+            _, predicted = (torch.max(outputs.data, 1))
+            total += len(labels)
+            correct += (predicted.cpu() == labels).sum()
+        print('Validation accuracy:', correct / total)
 
 
 if __name__ == '__main__':
